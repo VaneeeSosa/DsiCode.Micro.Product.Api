@@ -1,20 +1,19 @@
-﻿using System.ComponentModel.DataAnnotations;
-using System.Globalization;
-
-namespace DsiCode.Micro.Product.Api.Models
+﻿namespace DsiCode.Micro.Product.Api.Models.Dto
 {
-    public class Product
+    public class ProductDto
     {
-        [Key]
         public int ProductId { get; set; }
-        [Required]
         public string Name { get; set; }
-        [Range(1,100)]
-
         public double Price { get; set; }
         public string Description { get; set; }
-        public string CategoryName  { get; set; }
+        public string CategoryName { get; set; }
         public String ImageUrl { get; set; }
         public string ImageLocalPath { get; set; }
+
+        public IFormFile Image { get; set; }
+
+
+        //IFormFile aydua a traer todos los datos del archivo, nombre, esxtension, peso, etc
+
     }
 }
