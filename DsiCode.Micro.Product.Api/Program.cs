@@ -1,65 +1,69 @@
-﻿using System.Collections.Generic;
-using System.Text;
+﻿using System.Text;
 using AutoMapper;
 using DsiCode.Micro.Product.Api;
 using DsiCode.Micro.Product.Api.Data;
-using DsiCode.Micro.Product.Api.Extensions; // ← Aquí van tus métodos de extensión
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+using DsiCode.Micro.Product.Api.Extensions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.OpenApi.Models;
+using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1) Configurar DbContext
+// 1️⃣ Registrar servicios
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseMySql(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        new MySqlServerVersion(new Version(8, 0, 21)),
+        mysqlOptions =>
+        {
+            mysqlOptions.SchemaBehavior(
+                MySqlSchemaBehavior.Translate,
+                (originalName, defaultSchema) =>
+                    originalName.Replace("dbo.", "")
+            );
+            mysqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(30),
+                errorNumbersToAdd: null
+            );
+        }
+    )
+    .EnableSensitiveDataLogging()
+    .EnableDetailedErrors()
+);
 
-// 2) AutoMapper
-IMapper mapper = MappingConfig.RegisterMaps().CreateMapper();
-builder.Services.AddSingleton(mapper);
-builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
-
-// 3) CORS (si lo necesitas)
 builder.Services.AddCors();
-
-// 4) Controllers + JsonOptions (para ignorar ciclos)
 builder.Services.AddControllers()
     .AddJsonOptions(opts =>
         opts.JsonSerializerOptions.ReferenceHandler =
             System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles
     );
-
-// 5) Registrar tu autenticación JWT (extensión definida en AuthenticationExtensions.cs)
 builder.Services.AddJwtAuthentication(builder.Configuration);
-
-// 6) Registrar Swagger (extensión definida en AuthenticationExtensions.cs)
 builder.Services.AddSwaggerConfiguration();
-
-// 7) Registrar la exploración de endpoints (si usas Minimal APIs u OpenAPI)
 builder.Services.AddEndpointsApiExplorer();
 
+// 2️⃣ Construir la app
 var app = builder.Build();
 
-// --- Pipeline ---
+// 3️⃣ Aplicar migraciones automáticamente
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    dbContext.Database.Migrate();
+}
 
-// 8) Swagger en Development
+// --- Pipeline ---
+// 4️⃣ Swagger en Development
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "MicroservicioProducto v1");
-    });
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "MicroservicioProducto v1")
+    );
 }
 
 app.UseHttpsRedirection();
-
-// 9) Autenticación y Autorización
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();
